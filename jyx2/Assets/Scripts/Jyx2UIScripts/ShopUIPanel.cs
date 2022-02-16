@@ -52,7 +52,7 @@ public partial class ShopUIPanel : Jyx2_UIBase
 			visibleItems.Add(item);
 			BindListener(trans.GetComponent<Button>(), () =>
 			{
-				OnItemSelect(item);
+				OnItemSelect(item, false);
 			});
 		});
 
@@ -82,6 +82,10 @@ public partial class ShopUIPanel : Jyx2_UIBase
 		curShopData = GameConfigDatabase.Instance.Get<Jyx2ConfigShop>(curShopId);
 
 		RefreshChild();
+		//only change to first item, when first time showing
+		if (visibleItems.Count > 0 && GamepadHelper.GamepadConnected)
+			changeCurrentSelection(0);
+
 		RefreshProperty();
 		RefreshMoney();
 		if (allParams.Length > 1)
@@ -92,6 +96,8 @@ public partial class ShopUIPanel : Jyx2_UIBase
 
 	protected override void OnHidePanel()
 	{
+		itemX = 0;
+		itemY = 0;
 		base.OnHidePanel();
 		callback?.Invoke();
 		callback = null;
@@ -115,6 +121,8 @@ public partial class ShopUIPanel : Jyx2_UIBase
 		childMgr.RefreshChildCount(curShopData.ShopItems.Count);
 		List<Transform> childList = childMgr.GetUsingTransList();
 
+		float itemHeight = 0;
+
 		for (int i = 0; i < childList.Count; i++)
 		{
 			Transform trans = childList[i];
@@ -122,10 +130,15 @@ public partial class ShopUIPanel : Jyx2_UIBase
 			ShopUIItem uiItem = trans.GetComponent<ShopUIItem>();
 			int currentNum = GetHasBuyNum(data.Item.Id);
 			uiItem.Refresh(data, i, currentNum);
+
+			if (itemHeight == 0)
+				itemHeight = uiItem.rectTransform().rect.height;
 		}
 
-		if (visibleItems.Count > 0 && GamepadHelper.GamepadConnected)
-			changeCurrentSelection(0);
+		//setAreasHeightForItemCompleteView(itemHeight, new[] {
+		//	ItemsArea_ScrollReact.rectTransform(),
+		//	ItemDes_RectTransform
+		//});
 	}
 
 	void RefreshProperty()
@@ -140,19 +153,15 @@ public partial class ShopUIPanel : Jyx2_UIBase
 		DesText_Text.text = mainText;
 	}
 
-	void OnItemSelect(ShopUIItem item)
+	void OnItemSelect(ShopUIItem item, bool scroll)
 	{
+		curSelectItem?.SetSelect(false);
+
 		int index = item.GetIndex();
-		if (index == current_selection)
-			return;
-
-		if (curSelectItem != null)
-		{
-			curSelectItem.SetSelect(false);
-		}
-
 		current_selection = index;
-		curSelectItem.SetSelect(true);
+		curSelectItem?.SetSelect(true);
+		if (scroll)
+			scrollIntoView(ItemsArea_ScrollReact, item.transform as RectTransform, ItemRoot_GridLayout, 0);
 		RefreshProperty();
 	}
 
@@ -212,7 +221,7 @@ public partial class ShopUIPanel : Jyx2_UIBase
 	{
 		if (num >= 0 && num < visibleItems.Count)
 		{
-			OnItemSelect(visibleItems[num]);
+			OnItemSelect(visibleItems[num], true);
 		}
 		else
 		{
@@ -220,8 +229,6 @@ public partial class ShopUIPanel : Jyx2_UIBase
 			{
 				curSelectItem.SetSelect(false);
 			}
-
-			current_selection = -1;
 		}
 	}
 
@@ -236,6 +243,9 @@ public partial class ShopUIPanel : Jyx2_UIBase
 
 	private int getColCount()
 	{
+		if (visibleItems.Count == 0)
+			return 1;
+
 		return (int)Math.Floor(ItemRoot_RectTransform.rect.width / visibleItems[0].rectTransform().rect.width);
 	}
 

@@ -68,9 +68,6 @@ public abstract class Jyx2_UIBase : MonoBehaviour
 		this.gameObject.SetActive(true);
 		this.transform.SetAsLastSibling();
 
-		if (GamepadHelper.GamepadConnected && captureGamepadAxis && _buttonList.Count > 0)
-			changeCurrentSelection(0);
-
 		this.OnShowPanel(allParams);
 		if (this is IUIAnimator)
 		{
@@ -84,6 +81,17 @@ public abstract class Jyx2_UIBase : MonoBehaviour
 		}
 
 		VisibilityToggled?.Invoke(this, true);
+
+		if (resetCurrentSelectionOnShow && GamepadHelper.GamepadConnected && captureGamepadAxis && activeButtons.Length > 0)
+			changeCurrentSelection(0);
+	}
+
+	protected virtual bool resetCurrentSelectionOnShow
+	{
+		get
+		{
+			return true;
+		}
 	}
 
 	//temporarily comment out the game pad connection state change handler
@@ -140,8 +148,6 @@ public abstract class Jyx2_UIBase : MonoBehaviour
 
 			if (buttonText != null)
 				buttonText.color = i == current_selection ? selectedButtonColor() : normalButtonColor();
-
-			toggleGamepadButtonImage(activeButtons[i], i != current_selection);
 		}
 	}
 
@@ -178,9 +184,6 @@ public abstract class Jyx2_UIBase : MonoBehaviour
 			if (supportGamepadButtonsNav)
 				_buttonList[button] = callback;
 
-			//only deal with buttons don't support nav for now, since those buttons are fixed functionalities
-			toggleGamepadButtonImage(button, supportGamepadButtonsNav);
-
 			button.onClick.RemoveAllListeners();
 			button.onClick.AddListener(() =>
 			{
@@ -205,7 +208,7 @@ public abstract class Jyx2_UIBase : MonoBehaviour
 	}
 
 
-	private void toggleGamepadButtonImage(Button button, bool forceOff = false)
+	protected void toggleGamepadButtonImage(Button button, bool forceOff = false)
 	{
 		//toggle image visibility is there is an image on this button
 		var image = getButtonImage(button);
@@ -273,6 +276,7 @@ public abstract class Jyx2_UIBase : MonoBehaviour
 	}
 
 	bool gamepadConnected = false;
+	private bool scrollSizeAdjusted;
 
 	public virtual void Update()
 	{
@@ -283,29 +287,17 @@ public abstract class Jyx2_UIBase : MonoBehaviour
 			//toggle all button images
 			var buttons = this.gameObject.GetComponentsInChildren<Button>(true)
 				.Where(b => b != null);
-			List<Button> activeButtonsList = activeButtons.ToList();
 			foreach (var button in buttons)
 			{
-				var buttonIndex = activeButtonsList.IndexOf(button);
-
-				if (buttonIndex > -1)
-					if (buttonIndex != current_selection)
-					{
-						//turn off unselected
-						toggleGamepadButtonImage(button, true);
-					}
-					else
-					{
-						toggleGamepadButtonImage(button);
-					}
-				else
-					toggleGamepadButtonImage(button);
+				toggleGamepadButtonImage(button);
 			}
 		}
 
-		handleDpadMove();
-
-		handleGamepadButtons();
+		if (isOnTop())
+		{
+			handleDpadMove();
+			handleGamepadButtons();
+		}
 	}
 
 	protected virtual void handleGamepadButtons()
@@ -316,6 +308,11 @@ public abstract class Jyx2_UIBase : MonoBehaviour
 			if (captureGamepadAxis && activeButtons.Length > 0)
 				buttonClickAt(current_selection);
 		}
+	}
+
+	protected bool isOnTop()
+	{
+		return Jyx2_UIManager.Instance.IsTopVisibleUI(this);
 	}
 
 	protected virtual bool handleDpadMove()
@@ -403,5 +400,47 @@ public abstract class Jyx2_UIBase : MonoBehaviour
 			Thread.Sleep(axisReleaseDelay);
 			currentlyReleased = true;
 		});
+	}
+
+	protected void setAreasHeightForItemCompleteView(float itemHeight, RectTransform[] areasToAdjust )
+	{
+		if (areasToAdjust.Length == 0)
+			return;
+
+		if (!scrollSizeAdjusted)
+		{
+			//shrink scroll and description boxes, to make sure no half items showing
+			var boxHeight = areasToAdjust[0].rect.height;
+			boxHeight = (float)Math.Floor(boxHeight / itemHeight) * itemHeight;
+
+			foreach(var area in areasToAdjust)
+			{
+				var scrollSize = area.sizeDelta;
+				area.sizeDelta = new Vector2(scrollSize.x, boxHeight);
+			}
+
+			scrollSizeAdjusted = true;
+		}
+	}
+
+	protected void scrollIntoView(ScrollRect area, RectTransform item, GridLayoutGroup layout, float padding)
+	{
+		var itemHeight = layout.cellSize.y + layout.spacing.y;
+
+		Canvas.ForceUpdateCanvases();
+
+		var areaPos = area.transform.InverseTransformPoint(area.content.position).y;
+		var childPos = area.transform.InverseTransformPoint(item.position).y;
+		var scrollRelativePos = areaPos - childPos - area.content.anchoredPosition.y;
+
+		//check if the item is fully visible, if yes, no need to scroll
+		var areaHeight = (area.transform as RectTransform).rect.height - (padding * 2);
+
+		var scrollFinalRelativePos = (float) Math.Floor(scrollRelativePos / areaHeight) * areaHeight;
+
+		//if item display half, snap to top of the item
+		scrollFinalRelativePos =  (float)Math.Floor(scrollFinalRelativePos / itemHeight) * itemHeight;
+
+		area.content.anchoredPosition = new Vector2(0, area.content.anchoredPosition.y + scrollFinalRelativePos);
 	}
 }

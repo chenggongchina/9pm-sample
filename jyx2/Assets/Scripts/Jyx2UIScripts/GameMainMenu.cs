@@ -18,10 +18,11 @@ using UnityEngine.UI;
 using Jyx2Configs;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
+using Cysharp.Threading.Tasks;
 
 public partial class GameMainMenu : Jyx2_UIBase
 {
-
 	private enum PanelType
 	{
 		Home,
@@ -103,7 +104,8 @@ public partial class GameMainMenu : Jyx2_UIBase
 	{
 		if (m_panelType != PanelType.NewGamePage
 			&& m_panelType != PanelType.LoadGamePage
-			&& m_panelType != PanelType.PropertyPage)
+			&& m_panelType != PanelType.PropertyPage
+			&& !ReleaseNote_Panel.gameObject.activeSelf)
 			base.handleGamepadButtons();
 		else
 		{
@@ -129,6 +131,10 @@ public partial class GameMainMenu : Jyx2_UIBase
 					else if (m_panelType == PanelType.PropertyPage)
 					{
 						OnCreateRoleNoClick();
+					}
+					else if (ReleaseNote_Panel.gameObject.activeSelf)
+					{
+						ReleaseNote_Panel.gameObject.SetActive(false);
 					}
 				}
 		}
@@ -183,6 +189,30 @@ public partial class GameMainMenu : Jyx2_UIBase
 				OnCreateRoleNoClick();
 			}
 		});
+	}
+
+	private void toggleButtonOutline(Button button, bool on)
+	{
+		var outline = button?.gameObject.GetComponentInChildren<Outline>();
+		if (outline != null)
+			outline.enabled = on;
+	}
+
+	int current_selection_x = 3;
+
+	private void selectBottomButton(int index)
+	{
+		current_selection_x = index;
+		isXSelection = index > -1;
+
+		for (var i = 0; i < bottomButtons.Count; i++)
+		{
+			var button = bottomButtons[i];
+			toggleButtonOutline(button, i == current_selection_x);
+		}
+
+		if (index > -1)
+			changeCurrentSelection(-1);
 	}
 
 	private void onButtonClick()
@@ -305,30 +335,67 @@ public partial class GameMainMenu : Jyx2_UIBase
 			//首次进入游戏音乐
 			AudioManager.PlayMusic(GameConst.GAME_START_MUSIC_ID);
 			Jyx2_UIManager.Instance.HideUI(nameof(GameMainMenu));
-			LevelMaster.Instance.GetPlayer().transform.rotation = Quaternion.Euler(Vector3.zero);
+
+			var player = LevelMaster.Instance.GetPlayer();
+			player.OnSceneLoad().Forget();
 		});
 	}
 	private void OnCreateRoleNoClick()
 	{
+		DoGeneratePlayerRole();
+	}
+
+	/// <summary>
+	/// 参考:https://github.com/jynew/jynew/issues/688
+	/// </summary>
+	public void DoGeneratePlayerRole(bool cheating = false)
+	{
 		RoleInstance role = GameRuntimeData.Instance.Player;
-		for (int i = 0; i <= 12; i++)
+		
+		//生成基础属性
+		for (int i = 0; i <= 13; i++)
 		{
-			GenerateRamdomPro(role, i);
+			GenerateRamdomPro(role, i, cheating);
 		}
-		GenerateRamdomPro(role, 25);//资质
+
+		role.HpInc = cheating ? 7 : Tools.GetRandomInt(3, 7);
+		role.MaxHp = role.HpInc * 3 + 29;
+		int seed = cheating ? 9 : Tools.GetRandomInt(0, 9);
+		if (seed < 2)
+		{
+			role.IQ = Tools.GetRandomInt(0, 35) + 30;
+		}else if (seed <= 7)
+		{
+			role.IQ = Tools.GetRandomInt(0, 20) + 60;
+		}
+		else
+		{
+			role.IQ = Tools.GetRandomInt(0, 20) + 75;
+		}
+
 		m_randomProperty.RefreshProperty();
 	}
 
-	private void GenerateRamdomPro(RoleInstance role, int i)
+	private void GenerateRamdomPro(RoleInstance role, int i, bool cheating)
 	{
 		string key = i.ToString();
 		if (GameConst.ProItemDic.ContainsKey(key))
 		{
 			PropertyItem item = GameConst.ProItemDic[key];
-			int value = Tools.GetRandomInt(item.DefaulMin, item.DefaulMax);
-			role.GetType().GetField(item.PropertyName).SetValue(role, value);
+
+			int value = 0;
+			if (cheating) //秘籍
+			{
+				value = item.DefaulMax;
+			}
+			else
+			{
+				value = Tools.GetRandomInt(item.DefaulMin, item.DefaulMax);
+			}
+			role.GetType().GetField(item.PropertyName).SetValue(role, value);	
 		}
 	}
+	
 
 	private void OnBackBtnClicked()
 	{
@@ -362,4 +429,39 @@ public partial class GameMainMenu : Jyx2_UIBase
 	{
 		Jyx2_UIManager.Instance.ShowUI(nameof(GraphicSettingsPanel));
 	}
+
+	bool isXSelection = false;
+
+	protected override void OnDirectionalLeft()
+	{
+		var nextSelectionX = (current_selection_x <= 0) ? bottomButtons.Count - 1 : current_selection_x - 1;
+
+		selectBottomButton(nextSelectionX);
+	}
+
+	protected override void OnDirectionalRight()
+	{
+		var nextSelectionX = (current_selection_x >= bottomButtons.Count - 1) ? 0 : current_selection_x + 1;
+
+		selectBottomButton(nextSelectionX);
+	}
+
+	protected override void changeCurrentSelection(int num)
+	{
+		base.changeCurrentSelection(num);
+
+		if (num > -1)
+			selectBottomButton(-1);
+	}
+
+	protected override void buttonClickAt(int position)
+	{
+		if (!isXSelection)
+			base.buttonClickAt(position);
+		else
+		{
+			bottomButtons[current_selection_x]?.onClick?.Invoke();
+		}
+	}
+
 }

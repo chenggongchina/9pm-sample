@@ -114,6 +114,8 @@ public partial class BagUIPanel : Jyx2_UIBase
 		itemX = 0;
 		itemY = 0;
 
+		float itemHeight = 0;
+
 		foreach (var kv in m_itemsData)
 		{
 			string id = kv.Key;
@@ -145,7 +147,7 @@ public partial class BagUIPanel : Jyx2_UIBase
 
 			BindListener(btn, () =>
 			{
-				OnItemSelect(itemUI);
+				OnItemSelect(itemUI, false);
 			});
 
 			if (!hasSelect && GamepadHelper.GamepadConnected)
@@ -156,11 +158,28 @@ public partial class BagUIPanel : Jyx2_UIBase
 			}
 
 			itemUI.Select(m_selectItem == itemUI);
+
+			if (itemHeight == 0)
+			{
+				itemHeight = (itemUI.transform as RectTransform).rect.height;
+			}
 		}
+
+		//setAreasHeightForItemCompleteView(itemHeight, new[]
+		//{
+		//	ItemsArea_ScrollRect.rectTransform(),
+		//	ItemDes_RectTransform
+		//}); 
+
+		if (m_selectItem != null)
+			scrollIntoView(ItemsArea_ScrollRect, m_selectItem.transform as RectTransform, 
+				ItemRoot_GridLayout, 0);
 
 		setBtnText();
 
 		ShowItemDes();
+
+
 	}
 
 	void ShowItemDes()
@@ -178,7 +197,7 @@ public partial class BagUIPanel : Jyx2_UIBase
 		DesText_Text.text = UIHelper.GetItemDesText(item);
 	}
 
-	void OnItemSelect(Jyx2ItemUI itemUI)
+	void OnItemSelect(Jyx2ItemUI itemUI, bool scroll)
 	{
 		if (m_selectItem == itemUI)
 			return;
@@ -191,6 +210,11 @@ public partial class BagUIPanel : Jyx2_UIBase
 		setBtnText();
 
 		ShowItemDes();
+
+		if (scroll)
+			scrollIntoView(ItemsArea_ScrollRect, m_selectItem.gameObject.transform as RectTransform, 
+				ItemRoot_GridLayout, 0);
+
 	}
 
 	void OnCloseBtnClick()
@@ -222,25 +246,25 @@ public partial class BagUIPanel : Jyx2_UIBase
 		HSUnityTools.DestroyChildren(ItemRoot_RectTransform);
 	}
 
-    void setBtnText()
-    {
-        //---------------------------------------------------------------------------
-        //if (m_selectItem==null)return;
-        //if (castFromSelectPanel && m_selectItem.GetItem().Id == current_item)
-        //    UseBtn_Text.text = "卸 下";
-        //else
-        //    UseBtn_Text.text = "使 用";
-        //---------------------------------------------------------------------------
-        //特定位置的翻译【BagUIPanel右边显示的按钮文字】
-        //---------------------------------------------------------------------------
-        if (m_selectItem==null)return;
-        if (castFromSelectPanel && m_selectItem.GetItem().Id == current_item)
-            UseBtn_Text.text = "卸 下".GetContent(nameof(BagUIPanel));
-        else
-            UseBtn_Text.text = "使 用".GetContent(nameof(BagUIPanel));
-        //---------------------------------------------------------------------------
-        //---------------------------------------------------------------------------
-    }
+	void setBtnText()
+	{
+		//---------------------------------------------------------------------------
+		//if (m_selectItem==null)return;
+		//if (castFromSelectPanel && m_selectItem.GetItem().Id == current_item)
+		//    UseBtn_Text.text = "卸 下";
+		//else
+		//    UseBtn_Text.text = "使 用";
+		//---------------------------------------------------------------------------
+		//特定位置的翻译【BagUIPanel右边显示的按钮文字】
+		//---------------------------------------------------------------------------
+		if (m_selectItem == null) return;
+		if (castFromSelectPanel && m_selectItem.GetItem().Id == current_item)
+			UseBtn_Text.text = "卸 下".GetContent(nameof(BagUIPanel));
+		else
+			UseBtn_Text.text = "使 用".GetContent(nameof(BagUIPanel));
+		//---------------------------------------------------------------------------
+		//---------------------------------------------------------------------------
+	}
 
 
 	void RefreshFocusFilter()
@@ -282,7 +306,7 @@ public partial class BagUIPanel : Jyx2_UIBase
 	{
 		if (num >= 0 && num < visibleItems.Count)
 		{
-			OnItemSelect(visibleItems[num]);
+			OnItemSelect(visibleItems[num], true);
 		}
 		else
 		{
@@ -302,6 +326,9 @@ public partial class BagUIPanel : Jyx2_UIBase
 
 	private int getColCount()
 	{
+		if (visibleItems.Count == 0)
+			return 1;
+
 		return (int)Math.Floor(ItemRoot_RectTransform.rect.width / visibleItems[0].rectTransform().rect.width);
 	}
 
@@ -310,10 +337,14 @@ public partial class BagUIPanel : Jyx2_UIBase
 		return (int)Math.Ceiling((float)visibleItems.Count / (float)getColCount());
 	}
 
+	bool goingUpward = false;
+
 	protected override void OnDirectionalLeft()
 	{
+		goingUpward = true;
 		if (itemX > 0)
 			itemX--;
+
 		else if (itemY > 0)
 		{
 			itemX = getColCount() - 1;
@@ -336,14 +367,17 @@ public partial class BagUIPanel : Jyx2_UIBase
 
 	protected override void OnDirectionalUp()
 	{
+		goingUpward = true;
 		if (itemY > 0)
 			itemY--;
 
-		changeCurrentSelectionWithAxis();
+		if (!changeCurrentSelectionWithAxis())
+			itemY++;
 	}
 
 	protected override void OnDirectionalRight()
 	{
+		goingUpward = false;
 		if (itemX < getColCount() - 1)
 		{
 			itemX++;
@@ -359,6 +393,7 @@ public partial class BagUIPanel : Jyx2_UIBase
 
 	protected override void OnDirectionalDown()
 	{
+		goingUpward = false;
 		if (itemY < getRowCount() - 1)
 			itemY++;
 

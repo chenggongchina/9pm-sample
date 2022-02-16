@@ -158,7 +158,7 @@ public class BattleboxHelper : MonoBehaviour
 	private int xCurPos;
 	private int yCurPos;
 
-	public bool GamepadMoved = false;
+	public bool AnalogMoved = false;
 
 	private void Update()
 	{
@@ -194,8 +194,6 @@ public class BattleboxHelper : MonoBehaviour
 
 						if (!setSelectedBlock())
 							yCurPos++;
-
-
 					}
 				}
 			}
@@ -233,10 +231,10 @@ public class BattleboxHelper : MonoBehaviour
 
 		if (GamepadHelper.IsConfirm())
 		{
-			if (GamepadMoved && blockConfirmed != null)
+			if (AnalogMoved && blockConfirmed != null)
 			{
 				var selectedBlock =  _currentBattlebox.GetBlockData(xCurPos, yCurPos);
-				if (selectedBlock != null)
+				if (selectedBlock != null && !selectedBlock.Inaccessible)
 				{
 					blockConfirmed(selectedBlock);
 				}
@@ -256,13 +254,15 @@ public class BattleboxHelper : MonoBehaviour
 
 			_selectedBlock = newSelectedBlock;
 			_oldColor = newSelectedBlock.gameObject.GetComponent<EasyDecal>().DecalRenderer.material.GetColor("_TintColor");
-			_selectedBlock.gameObject.GetComponent<EasyDecal>().DecalRenderer.material.SetColor("_TintColor", new Color(1, 0, 1, BattleboxManager.BATTLEBLOCK_DECAL_ALPHA));
+			Color hiliteColor = newSelectedBlock.Inaccessible ?				
+				new Color(0.4f, 0.4f, 0.4f, BattleboxManager.BATTLEBLOCK_DECAL_ALPHA) : //gray color for inaccessible blocks
+				new Color(1, 0, 1, BattleboxManager.BATTLEBLOCK_DECAL_ALPHA);
+			_selectedBlock.gameObject.GetComponent<EasyDecal>().DecalRenderer.material.SetColor("_TintColor", hiliteColor);
 
+			AnalogMoved = true;
 
-			GamepadMoved = true;
-
-			if (dpadMovedToBlock != null)
-				dpadMovedToBlock(newSelectedBlock);
+			if (analogLeftMovedToBlock != null)
+				analogLeftMovedToBlock(newSelectedBlock);
 
 			return true;
 		}
@@ -270,7 +270,7 @@ public class BattleboxHelper : MonoBehaviour
 		return false;
 	}
 
-	public event Action<BattleBlockData> dpadMovedToBlock;
+	public event Action<BattleBlockData> analogLeftMovedToBlock;
 	public event Action<BattleBlockData> blockConfirmed;
 
 	private void initXPos()
@@ -280,9 +280,8 @@ public class BattleboxHelper : MonoBehaviour
 		.Where(b => b.IsActive)
 		.Select(b => b.BattlePos.X)
 		.OrderBy(p => p)
+		.Distinct()
 		.ToArray();
-
-		xMiddlePos = xPositions[(int)Math.Floor((float)xPositions.Length / 2)];
 	}
 
 	private void initYPos()
@@ -292,9 +291,8 @@ public class BattleboxHelper : MonoBehaviour
 		.Where(b => b.IsActive)
 		.Select(b => b.BattlePos.Y)
 		.OrderBy(p => p)
+		.Distinct()
 		.ToArray();
-
-		yMiddlePos = yPositions[(int)Math.Floor((float)yPositions.Length / 2)];
 	}
 
 	protected void delayedAxisRelease()
@@ -310,7 +308,7 @@ public class BattleboxHelper : MonoBehaviour
 	private BattleBlockData _selectedBlock;
 	private Color _oldColor;
 
-	public void ShowBlocks(IEnumerable<BattleBlockVector> list, BattleBlockType type = BattleBlockType.MoveZone,
+	public void ShowBlocks(RoleInstance role, IEnumerable<BattleBlockVector> list, BattleBlockType type = BattleBlockType.MoveZone,
 		bool selectMiddlePos = false)
 	{
 		if (!GeneralPreJudge()) return;
@@ -330,9 +328,20 @@ public class BattleboxHelper : MonoBehaviour
 		foreach (var vector in list)
 		{
 			var block = _currentBattlebox.GetBlockData(vector.X, vector.Y);
-			if (block != null && block.BoxBlock.IsValid) block.Show();
+			if (block != null && block.BoxBlock.IsValid)
+			{
+				if (vector.Inaccessible)
+				{
+					_currentBattlebox.SetBlockInaccessible(block);
+				}
+
+				block.Inaccessible = vector.Inaccessible;
+				block.Show();
+			}
 		}
 
+		xMiddlePos = role.Pos.X;
+		yMiddlePos = role.Pos.Y;
 		initShownPositions();
 
 		if (selectMiddlePos)
@@ -361,10 +370,11 @@ public class BattleboxHelper : MonoBehaviour
 		foreach (var vector in list)
 		{
 			var block = _currentBattlebox.GetRangelockData(vector.X, vector.Y);
-			if (block != null && block.BoxBlock.IsValid) block.Show();
+			if (block != null && block.BoxBlock.IsValid) 
+				block.Show();
 		}
 
-		initShownPositions();
+		//initShownPositions();
 		rangeMode = true;
 	}
 

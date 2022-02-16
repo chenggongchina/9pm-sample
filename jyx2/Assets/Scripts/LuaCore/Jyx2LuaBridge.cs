@@ -1309,7 +1309,8 @@ namespace Jyx2
                         {
                             if (playableBinding.outputTargetType == typeof(Animator))
                             {
-                                playableDirector.SetGenericBinding(playableBinding.sourceObject, GameRuntimeData.Instance.Player.View.GetAnimator().gameObject);
+                                var bindPlayerObj = Jyx2Player.GetPlayer().GetComponent<MapRole>().GetAnimator().gameObject;
+                                playableDirector.SetGenericBinding(playableBinding.sourceObject, bindPlayerObj);
                             }
                         });
                     }
@@ -1404,7 +1405,7 @@ namespace Jyx2
         /// </summary>
         /// <param name="rolePath"></param>
         /// <param name="animationControllerPath"></param>
-        public static void jyx2_SwitchRoleAnimation(string rolePath, string animationControllerPath)
+        public static void jyx2_SwitchRoleAnimation(string rolePath, string animationControllerPath, string scene = "")
         {
             Debug.Log("jyx2_SwitchRoleAnimation called");
 
@@ -1418,7 +1419,7 @@ namespace Jyx2
                     return;
                 }
 
-                level.ReplaceNpcAnimatorController("", rolePath, animationControllerPath);
+                level.ReplaceNpcAnimatorController(scene, rolePath, animationControllerPath);
                 Next();
             });
             Wait();
